@@ -1,0 +1,173 @@
+
+CREATE TABLE IF NOT EXISTS Produtos (
+    ProdutoID INT AUTO_INCREMENT PRIMARY KEY,
+    Nome VARCHAR(100) NOT NULL,
+    Descricao TEXT,
+    Preco DECIMAL(10, 2) NOT NULL,
+    Categoria VARCHAR(50),
+    DataCadastro DATETIME DEFAULT CURRENT_TIMESTAMP,
+    Ativo BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS Fornecedores (
+    FornecedorID INT AUTO_INCREMENT PRIMARY KEY,
+    Nome VARCHAR(100) NOT NULL,
+    CNPJ VARCHAR(18) UNIQUE,
+    Telefone VARCHAR(15),
+    Email VARCHAR(100),
+    Endereco TEXT,
+    DataCadastro DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+
+CREATE TABLE IF NOT EXISTS Estoque (
+    EstoqueID INT AUTO_INCREMENT PRIMARY KEY,
+    ProdutoID INT NOT NULL,
+    FornecedorID INT NOT NULL,
+    Quantidade INT NOT NULL CHECK (Quantidade >= 0),
+    DataEntrada DATETIME DEFAULT CURRENT_TIMESTAMP,
+    Localizacao VARCHAR(50),
+    Lote VARCHAR(20),
+    FOREIGN KEY (ProdutoID) REFERENCES Produtos(ProdutoID)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+    FOREIGN KEY (FornecedorID) REFERENCES Fornecedores(FornecedorID)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+    INDEX idx_produto (ProdutoID),
+    INDEX idx_fornecedor (FornecedorID),
+    INDEX idx_data_entrada (DataEntrada),
+    INDEX idx_lote (Lote)
+);
+
+
+INSERT INTO Produtos (Nome, Descricao, Preco, Categoria) VALUES
+('Notebook Dell Inspiron', 'Notebook Dell i7 16GB RAM, SSD 512GB', 4500.00, 'Informática'),
+('Mouse Sem Fio Logitech', 'Mouse óptico sem fio 1600DPI', 120.00, 'Periféricos'),
+('Teclado Mecânico RGB', 'Teclado mecânico com iluminação RGB', 350.00, 'Periféricos'),
+('Monitor 24" Full HD', 'Monitor LED 24 polegadas, 1920x1080', 899.90, 'Monitores');
+
+INSERT INTO Fornecedores (Nome, CNPJ, Telefone, Email, Endereco) VALUES
+('TechFornecedor Ltda', '12.345.678/0001-99', '(11) 9999-8888', 'contato@techfornecedor.com', 'Rua das Tecnologias, 123 - São Paulo/SP'),
+('EletroDistribuidora', '98.765.432/0001-11', '(21) 7777-6666', 'vendas@eletrodist.com', 'Av. das Indústrias, 456 - Rio de Janeiro/RJ'),
+('Componentes & Cia', '45.632.987/0001-22', '(31) 8888-7777', 'compras@componentescia.com.br', 'Rua dos Componentes, 789 - Belo Horizonte/MG');
+
+INSERT INTO Estoque (ProdutoID, FornecedorID, Quantidade, DataEntrada, Localizacao, Lote) VALUES
+(1, 1, 50, '2023-05-15 10:00:00', 'Prateleira A1', 'LOTE202305A'),
+(1, 2, 30, '2023-05-20 14:30:00', 'Prateleira A2', 'LOTE202305B'),
+(2, 1, 200, '2023-06-01 09:15:00', 'Prateleira B3', 'LOTE202306A'),
+(3, 3, 75, '2023-06-10 11:20:00', 'Prateleira C1', 'LOTE202306B'),
+(4, 2, 40, '2023-06-15 16:45:00', 'Prateleira D2', 'LOTE202306C'),
+(2, 3, 150, '2023-06-20 08:30:00', 'Prateleira B4', 'LOTE202306D');
+
+
+
+
+SELECT 
+    e.EstoqueID,
+    p.Nome AS Produto,
+    f.Nome AS Fornecedor,
+    e.Quantidade,
+    e.Localizacao,
+    e.Lote,
+    e.DataEntrada
+FROM 
+    Estoque e
+JOIN 
+    Produtos p ON e.ProdutoID = p.ProdutoID
+JOIN 
+    Fornecedores f ON e.FornecedorID = f.FornecedorID
+ORDER BY 
+    e.DataEntrada DESC;
+
+
+SELECT 
+    p.Categoria,
+    SUM(e.Quantidade) AS TotalEmEstoque,
+    COUNT(DISTINCT e.ProdutoID) AS Variedades
+FROM 
+    Estoque e
+JOIN 
+    Produtos p ON e.ProdutoID = p.ProdutoID
+GROUP BY 
+    p.Categoria
+ORDER BY 
+    TotalEmEstoque DESC;
+
+
+SELECT 
+    f.Nome AS Fornecedor,
+    SUM(e.Quantidade) AS TotalItens,
+    SUM(e.Quantidade * p.Preco) AS ValorTotal
+FROM 
+    Estoque e
+JOIN 
+    Produtos p ON e.ProdutoID = p.ProdutoID
+JOIN 
+    Fornecedores f ON e.FornecedorID = f.FornecedorID
+GROUP BY 
+    f.FornecedorID, f.Nome
+ORDER BY 
+    ValorTotal DESC;
+
+
+
+
+ALTER TABLE Estoque
+ADD COLUMN PrecoCusto DECIMAL(10, 2) AFTER Quantidade;
+
+
+UPDATE Estoque SET PrecoCusto = 
+    CASE 
+        WHEN ProdutoID = 1 THEN 3800.00
+        WHEN ProdutoID = 2 THEN 90.00
+        WHEN ProdutoID = 3 THEN 280.00
+        WHEN ProdutoID = 4 THEN 750.00
+    END;
+
+
+CREATE VIEW RelatorioEstoque AS
+SELECT 
+    p.Nome AS Produto,
+    p.Categoria,
+    f.Nome AS Fornecedor,
+    e.Quantidade,
+    e.PrecoCusto,
+    p.Preco AS PrecoVenda,
+    (p.Preco - e.PrecoCusto) AS LucroUnitario,
+    (e.Quantidade * (p.Preco - e.PrecoCusto)) AS LucroTotal
+FROM 
+    Estoque e
+JOIN 
+    Produtos p ON e.ProdutoID = p.ProdutoID
+JOIN 
+    Fornecedores f ON e.FornecedorID = f.FornecedorID
+WHERE
+    e.Quantidade > 0;
+
+
+SELECT * FROM RelatorioEstoque ORDER BY LucroTotal DESC;
+
+
+START TRANSACTION;
+
+INSERT INTO Estoque (ProdutoID, FornecedorID, Quantidade, PrecoCusto, Localizacao, Lote)
+VALUES (3, 1, 60, 290.00, 'Prateleira C2', 'LOTE202307A');
+
+UPDATE Produtos SET Preco = 370.00 WHERE ProdutoID = 3;
+
+COMMIT;
+
+
+SELECT 
+    p.Nome,
+    e.Quantidade,
+    e.PrecoCusto,
+    p.Preco AS PrecoVenda,
+    e.DataEntrada
+FROM 
+    Estoque e
+JOIN 
+    Produtos p ON e.ProdutoID = p.ProdutoID
+WHERE 
+    p.ProdutoID = 3;
